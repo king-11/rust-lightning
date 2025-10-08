@@ -4877,7 +4877,7 @@ impl<Signer: EcdsaChannelSigner> ChannelMonitorImpl<Signer> {
 		let tx = holder_tx.trust();
 		let mut htlcs = Vec::with_capacity(holder_tx.nondust_htlcs().len());
 		debug_assert_eq!(holder_tx.nondust_htlcs().len(), holder_tx.counterparty_htlc_sigs.len());
-		for (htlc, counterparty_sig) in holder_tx.nondust_htlcs().iter().zip(holder_tx.counterparty_htlc_sigs.iter()) {
+		for (htlc_idx, (htlc, counterparty_sig)) in holder_tx.nondust_htlcs().iter().zip(holder_tx.counterparty_htlc_sigs.iter()).enumerate() {
 			assert!(htlc.transaction_output_index.is_some(), "Expected transaction output index for non-dust HTLC");
 
 			let preimage = if htlc.offered {
@@ -4888,6 +4888,8 @@ impl<Signer: EcdsaChannelSigner> ChannelMonitorImpl<Signer> {
 				// We can't build an HTLC-Success transaction without the preimage
 				continue;
 			};
+
+			let htlc_id = holder_tx.htlc_ids.get(htlc_idx).copied();
 
 			htlcs.push(HTLCDescriptor {
 				channel_derivation_parameters: ChannelDerivationParameters {
@@ -4902,7 +4904,7 @@ impl<Signer: EcdsaChannelSigner> ChannelMonitorImpl<Signer> {
 				htlc: htlc.clone(),
 				preimage,
 				counterparty_sig: *counterparty_sig,
-				htlc_id: None,
+				htlc_id,
 			});
 		}
 

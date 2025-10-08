@@ -512,10 +512,13 @@ impl HolderHTLCOutput {
 				return None;
 			}
 
-			let (htlc, counterparty_sig) =
+			let (htlc_idx, (htlc, counterparty_sig)) =
 				trusted_tx.nondust_htlcs().iter().zip(holder_commitment.counterparty_htlc_sigs.iter())
-					.find(|(htlc, _)| htlc.transaction_output_index.unwrap() == outp.vout)
+					.enumerate()
+					.find(|(_, (htlc, _))| htlc.transaction_output_index.unwrap() == outp.vout)
 					.unwrap();
+
+			let htlc_id = holder_commitment.htlc_ids.get(htlc_idx).copied();
 
 			Some(HTLCDescriptor {
 				channel_derivation_parameters: ChannelDerivationParameters {
@@ -530,7 +533,7 @@ impl HolderHTLCOutput {
 				htlc: htlc.clone(),
 				preimage: self.preimage.clone(),
 				counterparty_sig: *counterparty_sig,
-				htlc_id: None,
+				htlc_id,
 			})
 		};
 

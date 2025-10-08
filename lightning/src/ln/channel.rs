@@ -1067,6 +1067,7 @@ struct HTLCStats {
 struct CommitmentData<'a> {
 	tx: CommitmentTransaction,
 	htlcs_included: Vec<(HTLCOutputInCommitment, Option<&'a HTLCSource>)>, // the list of HTLCs (dust HTLCs *included*) which were not ignored when building the transaction
+	htlc_ids: Vec<u64>, // the htlc_ids corresponding to htlcs_included, in the same order
 	outbound_htlc_preimages: Vec<PaymentPreimage>, // preimages for successful offered HTLCs since last commitment
 	inbound_htlc_preimages: Vec<PaymentPreimage>, // preimages for successful received HTLCs since last commitment
 }
@@ -3053,6 +3054,7 @@ where
 			initial_commitment_tx,
 			counterparty_signature,
 			Vec::new(),
+			Vec::new(),
 			&self.funding().get_holder_pubkeys().funding_pubkey,
 			&self.funding().counterparty_funding_pubkey()
 		);
@@ -4797,7 +4799,7 @@ where
 		&self, funding: &FundingScope, transaction_number: u64, commitment_point: PublicKey,
 		msg: &msgs::CommitmentSigned, fee_estimator: &LowerBoundedFeeEstimator<F>, logger: &L,
 	) -> Result<
-		(HolderCommitmentTransaction, Vec<(HTLCOutputInCommitment, Option<&HTLCSource>)>),
+		(HolderCommitmentTransaction, Vec<(HTLCOutputInCommitment, Option<&HTLCSource>)>, Vec<u64>),
 		ChannelError,
 	>
 	where
@@ -4910,6 +4912,7 @@ where
 			commitment_data.tx,
 			msg.signature,
 			msg.htlc_signatures.clone(),
+			commitment_data.htlc_ids.clone(),
 			&funding.get_holder_pubkeys().funding_pubkey,
 			funding.counterparty_funding_pubkey(),
 		);
@@ -4922,7 +4925,7 @@ where
 			)
 			.map_err(|_| ChannelError::close("Failed to validate our commitment".to_owned()))?;
 
-		Ok((holder_commitment_tx, commitment_data.htlcs_included))
+		Ok((holder_commitment_tx, commitment_data.htlcs_included, commitment_data.htlc_ids))
 	}
 
 	fn can_send_update_fee<F: Deref, L: Deref>(
@@ -5146,6 +5149,7 @@ where
 
 		let num_htlcs = self.pending_inbound_htlcs.len() + self.pending_outbound_htlcs.len();
 		let mut htlcs_included: Vec<(HTLCOutputInCommitment, Option<&HTLCSource>)> = Vec::with_capacity(num_htlcs);
+		let mut htlc_ids: Vec<u64> = Vec::with_capacity(num_htlcs);
 		let mut value_to_self_claimed_msat = 0;
 		let mut value_to_remote_claimed_msat = 0;
 
@@ -5171,6 +5175,7 @@ where
 			($htlc: expr, $outbound: expr, $source: expr) => {
 				let htlc = get_htlc_in_commitment!($htlc, $outbound == local);
 				htlcs_included.push((htlc, $source));
+				htlc_ids.push($htlc.htlc_id);
 			}
 		}
 
@@ -5268,7 +5273,10 @@ where
 
 		// This places the non-dust HTLC-source pairs first, in the order they appear in the
 		// commitment transaction, followed by the dust HTLC-source pairs.
-		htlcs_included.sort_unstable_by(|(htlc_a, _), (htlc_b, _)| {
+		// Sort htlc_ids in the same order as htlcs_included
+		let mut indexed_htlcs: Vec<((HTLCOutputInCommitment, Option<&HTLCSource>), u64)> = 
+			htlcs_included.into_iter().zip(htlc_ids.into_iter()).collect();
+		indexed_htlcs.sort_unstable_by(|((htlc_a, _), _), ((htlc_b, _), _)| {
 			match (htlc_a.transaction_output_index, htlc_b.transaction_output_index) {
 				// `None` is smaller than `Some`, but we want `Some` ordered before `None` in the vector
 				(None, Some(_)) => cmp::Ordering::Greater,
@@ -5276,10 +5284,12 @@ where
 				(l, r) => cmp::Ord::cmp(&l, &r),
 			}
 		});
+		let (htlcs_included, htlc_ids): (Vec<_>, Vec<_>) = indexed_htlcs.into_iter().unzip();
 
 		CommitmentData {
 			tx,
 			htlcs_included,
+			htlc_ids,
 			inbound_htlc_preimages,
 			outbound_htlc_preimages,
 		}
@@ -7635,7 +7645,7 @@ where
 				"current_point should be set for channels initiating splicing".to_owned(),
 			)
 		})?;
-		let (holder_commitment_tx, _) = self.context.validate_commitment_signed(
+		let (holder_commitment_tx, _, _) = self.context.validate_commitment_signed(
 			pending_splice_funding,
 			transaction_number,
 			commitment_point,
@@ -7738,7 +7748,7 @@ where
 				fee_estimator,
 				logger,
 			)
-			.map(|(commitment_tx, htlcs_included)| {
+			.map(|(commitment_tx, htlcs_included, _htlc_ids)| {
 				let (nondust_htlc_sources, dust_htlcs) =
 					Self::get_commitment_htlc_data(&htlcs_included);
 				let htlc_outputs =
@@ -7803,7 +7813,7 @@ where
 			})?;
 			let transaction_number = self.holder_commitment_point.next_transaction_number();
 			let commitment_point = self.holder_commitment_point.next_point();
-			let (commitment_tx, htlcs_included) = self.context.validate_commitment_signed(
+			let (commitment_tx, htlcs_included, _htlc_ids) = self.context.validate_commitment_signed(
 				funding,
 				transaction_number,
 				commitment_point,
@@ -12299,7 +12309,7 @@ where
 		self.context.resend_order = RAACommitmentOrder::RevokeAndACKFirst;
 
 		let update = if self.pending_funding().is_empty() {
-			let (htlcs_ref, counterparty_commitment_tx) =
+			let (htlcs_ref, _htlc_ids, counterparty_commitment_tx) =
 				self.build_commitment_no_state_update(&self.funding, logger);
 			let htlc_outputs = htlcs_ref.into_iter()
 				.map(|(htlc, htlc_source)| (
@@ -12323,7 +12333,7 @@ where
 			let commitment_txs = core::iter::once(&self.funding)
 				.chain(self.pending_funding().iter())
 				.map(|funding| {
-					let (htlcs_ref, counterparty_commitment_tx) =
+					let (htlcs_ref, _htlc_ids, counterparty_commitment_tx) =
 						self.build_commitment_no_state_update(funding, logger);
 					if htlc_data.is_none() {
 						let nondust_htlc_sources = htlcs_ref.iter()
@@ -12364,7 +12374,7 @@ where
 	#[rustfmt::skip]
 	fn build_commitment_no_state_update<L: Deref>(
 		&self, funding: &FundingScope, logger: &L,
-	) -> (Vec<(HTLCOutputInCommitment, Option<&HTLCSource>)>, CommitmentTransaction)
+	) -> (Vec<(HTLCOutputInCommitment, Option<&HTLCSource>)>, Vec<u64>, CommitmentTransaction)
 	where
 		L::Target: Logger,
 	{
@@ -12374,7 +12384,7 @@ where
 		);
 		let counterparty_commitment_tx = commitment_data.tx;
 
-		(commitment_data.htlcs_included, counterparty_commitment_tx)
+		(commitment_data.htlcs_included, commitment_data.htlc_ids, counterparty_commitment_tx)
 	}
 
 	/// Only fails in case of signer rejection. Used for channel_reestablish commitment_signed
@@ -16213,6 +16223,7 @@ mod tests {
 					commitment_tx.clone(),
 					counterparty_signature,
 					counterparty_htlc_sigs,
+					vec![],
 					&holder_pubkeys.funding_pubkey,
 					chan.funding.counterparty_funding_pubkey()
 				);
