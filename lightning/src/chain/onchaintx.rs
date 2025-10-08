@@ -1395,7 +1395,8 @@ mod tests {
 		let holder_commit = tx_handler.current_holder_commitment_tx();
 		let holder_commit_txid = holder_commit.trust().txid();
 		let mut requests = Vec::new();
-		for (htlc, counterparty_sig) in holder_commit.nondust_htlcs().iter().zip(holder_commit.counterparty_htlc_sigs.iter()) {
+		for (htlc_idx, (htlc, counterparty_sig)) in holder_commit.nondust_htlcs().iter().zip(holder_commit.counterparty_htlc_sigs.iter()).enumerate() {
+			let htlc_id = holder_commit.htlc_ids.get(htlc_idx).copied();
 			requests.push(PackageTemplate::build_package(
 				holder_commit_txid,
 				htlc.transaction_output_index.unwrap(),
@@ -1412,6 +1413,7 @@ mod tests {
 						htlc: htlc.clone(),
 						preimage: None,
 						counterparty_sig: *counterparty_sig,
+						htlc_id,
 					},
 					0
 				)),

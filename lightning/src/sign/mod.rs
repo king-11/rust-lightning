@@ -591,6 +591,9 @@ pub struct HTLCDescriptor {
 	pub preimage: Option<PaymentPreimage>,
 	/// The counterparty's signature required to spend the HTLC output.
 	pub counterparty_sig: Signature,
+	/// The HTLC ID. This uniquely identifies the HTLC within the channel.
+	/// May be `None` if the HTLC ID is not available in the context where the descriptor is created.
+	pub htlc_id: Option<u64>,
 }
 
 impl_writeable_tlv_based!(HTLCDescriptor, {
@@ -602,6 +605,7 @@ impl_writeable_tlv_based!(HTLCDescriptor, {
 	(8, htlc, required),
 	(10, preimage, option),
 	(12, counterparty_sig, required),
+	(13, htlc_id, option),
 });
 
 impl HTLCDescriptor {

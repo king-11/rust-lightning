@@ -1265,6 +1265,8 @@ pub struct HolderCommitmentTransaction {
 	pub counterparty_sig: Signature,
 	/// All non-dust counterparty HTLC signatures, in the order they appear in the transaction
 	pub counterparty_htlc_sigs: Vec<Signature>,
+	/// HTLC IDs corresponding to the non-dust HTLCs, in the same order as they appear in the transaction
+	pub htlc_ids: Vec<u64>,
 	// Which order the signatures should go in when constructing the final commitment tx witness.
 	// The user should be able to reconstruct this themselves, so we don't bother to expose it.
 	holder_sig_first: bool,
@@ -1290,6 +1292,7 @@ impl_writeable_tlv_based!(HolderCommitmentTransaction, {
 	(2, counterparty_sig, required),
 	(4, holder_sig_first, required),
 	(6, counterparty_htlc_sigs, required_vec),
+	(7, htlc_ids, optional_vec),
 });
 
 impl HolderCommitmentTransaction {
@@ -1326,6 +1329,7 @@ impl HolderCommitmentTransaction {
 			inner,
 			counterparty_sig: dummy_sig,
 			counterparty_htlc_sigs,
+			htlc_ids: vec![],
 			holder_sig_first: false
 		}
 	}
@@ -1333,11 +1337,12 @@ impl HolderCommitmentTransaction {
 	/// Create a new holder transaction with the given counterparty signatures.
 	/// The funding keys are used to figure out which signature should go first when building the transaction for broadcast.
 	#[rustfmt::skip]
-	pub fn new(commitment_tx: CommitmentTransaction, counterparty_sig: Signature, counterparty_htlc_sigs: Vec<Signature>, holder_funding_key: &PublicKey, counterparty_funding_key: &PublicKey) -> Self {
+	pub fn new(commitment_tx: CommitmentTransaction, counterparty_sig: Signature, counterparty_htlc_sigs: Vec<Signature>, htlc_ids: Vec<u64>, holder_funding_key: &PublicKey, counterparty_funding_key: &PublicKey) -> Self {
 		Self {
 			inner: commitment_tx,
 			counterparty_sig,
 			counterparty_htlc_sigs,
+			htlc_ids,
 			holder_sig_first: holder_funding_key.serialize()[..] < counterparty_funding_key.serialize()[..],
 		}
 	}
