@@ -1412,6 +1412,7 @@ mod tests {
 						htlc: htlc.clone(),
 						preimage: None,
 						counterparty_sig: *counterparty_sig,
+						htlc_id: None,
 					},
 					0
 				)),

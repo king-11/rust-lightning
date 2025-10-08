@@ -4902,6 +4902,7 @@ impl<Signer: EcdsaChannelSigner> ChannelMonitorImpl<Signer> {
 				htlc: htlc.clone(),
 				preimage,
 				counterparty_sig: *counterparty_sig,
+				htlc_id: None,
 			});
 		}
 

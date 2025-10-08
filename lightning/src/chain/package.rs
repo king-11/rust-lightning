@@ -530,6 +530,7 @@ impl HolderHTLCOutput {
 				htlc: htlc.clone(),
 				preimage: self.preimage.clone(),
 				counterparty_sig: *counterparty_sig,
+				htlc_id: None,
 			})
 		};
 
@@ -1917,6 +1918,7 @@ mod tests {
 						htlc,
 						preimage: Some(preimage),
 						counterparty_sig: commitment_tx.counterparty_htlc_sigs[0].clone(),
+						htlc_id: None,
 					},
 					0,
 				))
@@ -1954,6 +1956,7 @@ mod tests {
 						htlc,
 						preimage: None,
 						counterparty_sig: commitment_tx.counterparty_htlc_sigs[0].clone(),
+						htlc_id: None,
 					},
 					0,
 				))

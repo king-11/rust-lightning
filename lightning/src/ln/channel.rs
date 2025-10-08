@@ -16266,6 +16266,7 @@ mod tests {
 						htlc: htlc.clone(),
 						preimage: preimage.clone(),
 						counterparty_sig: *htlc_counterparty_sig,
+						htlc_id: None,
 					}, &secp_ctx).unwrap();
 					let num_anchors = if $channel_type_features.supports_anchors_zero_fee_htlc_tx() { 2 } else { 0 };
 					assert_eq!(htlc.transaction_output_index, Some($htlc_idx + num_anchors), "output index");
